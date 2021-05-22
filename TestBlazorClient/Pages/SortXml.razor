@@ -1,0 +1,250 @@
+﻿@page "/SortXml"
+@using System.Xml
+@using System.Text;
+@using System.Threading
+@implements IDisposable
+@inject ClipboardService ClipboardService
+
+<h1>Sort XML</h1>
+
+<h3>input:</h3>
+<textarea @bind="input" class="lg-textarea form-control" rows="15"></textarea>
+
+排序类型：
+<label><input type="checkbox" @bind="isSortNode" />Node</label>
+<label><input type="checkbox" @bind="isSortAttr" />Attr</label>
+<br />
+<button class="btn btn-primary" @onclick="Sort">Sort and format</button>
+
+<hr />
+<span class="h3">output:</span>
+<button class="btn btn-primary" @onclick="CopyToClipboard" disabled=@state.IsDisabled>
+    <i class="@state.ClassName"></i> @state.Text
+</button>
+
+<pre><code id="out">@output</code></pre>
+
+@code {
+    string input;
+    string output;
+    bool isSortNode = true;
+    bool isSortAttr = true;
+
+    void Sort()
+    {
+        output = "";
+
+        var doc = new XmlDocument();
+
+        try
+        {
+            doc.LoadXml(input);
+            doc.PreserveWhitespace = true;
+        }
+        catch (Exception ex)
+        {
+            output = $"error! input:{input}. ex:{ex.Message}";
+            return;
+        }
+
+        if (isSortAttr)
+        {
+            SortNodeAttrs(doc.DocumentElement);
+        }
+
+        if (isSortNode)
+        {
+            SortNodes(doc.DocumentElement);
+        }
+
+        var stringBuilder = new StringBuilder();
+
+        using (var xmlWriter = XmlWriter.Create(stringBuilder, _settings))
+        {
+            doc.Save(xmlWriter);
+        }
+
+        output = stringBuilder.ToString();
+    }
+
+    XmlWriterSettings _settings = new()
+    {
+        OmitXmlDeclaration = true,
+        Indent = true,
+        //NewLineOnAttributes = true
+    };
+
+    #region Copy到粘贴板
+
+    CancellationTokenSource cts = new();
+    State state = new("Copy", "oi oi-clipboard");
+
+    async Task CopyToClipboard()
+    {
+        var temp = state;
+        state = new("Copied", "oi oi-check", IsDisabled: true);
+        await ClipboardService.WriteTextAsync(output);
+        await Task.Delay(TimeSpan.FromSeconds(2), cts.Token);
+        state = temp;
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel(); // Cancel Task.Delay
+        cts.Dispose();
+    }
+
+    record State(string Text, string ClassName, bool IsDisabled = false);
+
+    #endregion
+
+    static bool sort_node = true;
+    static bool sort_attr = true;
+    static bool pretty = true;
+    static bool pause = false;
+    static bool overwriteSelf = false;
+    static StringComparison sort_node_comp = StringComparison.CurrentCulture; // Default to case-sensitive sorting.
+    static StringComparison sort_attr_comp = StringComparison.CurrentCulture;
+    static string primary_attr = "";
+
+    static void SortNodes(XmlNode node)
+    {
+        // Go down to the furthest child and start there..
+        // That is so I can include child nodes in the current node's sort,
+        // if all of it's attributes match..
+        for (int i = 0, len = node.ChildNodes.Count; i < len; i++)
+        {
+            SortNodes(node.ChildNodes[i]);
+        }
+
+        // Remove, sort, then re-add the node's children.
+        if (sort_node && node.ChildNodes != null && node.ChildNodes.Count > 0)
+        {
+            var nodes = new List<XmlNode>(node.ChildNodes.Count);
+
+            for (var i = node.ChildNodes.Count - 1; i >= 0; i--)
+            {
+                nodes.Add(node.ChildNodes[i]);
+                node.RemoveChild(node.ChildNodes[i]);
+            }
+
+            nodes.Sort(SortDelegate);
+
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                node.AppendChild(nodes[i]);
+            }
+        }
+    }
+
+    static int SortDelegate(XmlNode a, XmlNode b)
+    {
+        var result = string.Compare(a.Name, b.Name, sort_node_comp);
+
+        // NOTE: Always sort the _nodes_ based on its attributes (when the
+        //       name matches), but don't actually sort the node's attributes.
+        //       Sorting attributes, if specified, is done before node sorting happens..
+
+        if (result == 0)
+        {
+            var col1 = (a.Attributes.Count >= b.Attributes.Count) ? a.Attributes : b.Attributes;
+            var col2 = (a.Attributes.Count >= b.Attributes.Count) ? b.Attributes : a.Attributes;
+
+            for (var i = 0; i < col1.Count; i++)
+            {
+                if (i < col2.Count)
+                {
+                    var aa = col1[i];
+                    var bb = col2[i];
+                    result = string.Compare(aa.Name, bb.Name, sort_attr_comp);
+                    if (result == 0)
+                    {
+                        result = string.Compare(aa.Value, bb.Value, sort_attr_comp);
+                        if (result != 0)
+                        {
+                            return result;
+                        }
+                        // Attribute name and value match.. continue loop.
+                    }
+                    else
+                    {
+                        return result;
+                    }
+                }
+                else
+                {
+                    return 1;
+                }
+            }
+
+            // If we get here, that means that the node's attributes (and values) all match..
+            // TODO: Should we go down into the child node collections for sorting?
+            //       See example `c.xml`..
+            //Console.WriteLine(a.Name + "==" + b.Name + " all attributes matched");
+        }
+
+        return result;
+    }
+
+    static void SortNodeAttrs(XmlNode node)
+    {
+        // Remove, sort, then re-add the node's attributes.
+        if (sort_attr && node.Attributes != null && node.Attributes.Count > 0)
+        {
+            SortXmlAttributeCollection(node.Attributes);
+        }
+
+        // Sort the children node's attributes also.
+        for (int i = 0, len = node.ChildNodes.Count; i < len; i++)
+        {
+            SortNodeAttrs(node.ChildNodes[i]);
+        }
+    }
+
+    static void SortXmlAttributeCollection(XmlAttributeCollection col)
+    {
+        // Remove, sort, then re-add the attributes to the collection.
+        if (sort_attr && col != null && col.Count > 0)
+        {
+            var attrs = new List<XmlAttribute>(col.Count);
+
+            for (var i = col.Count - 1; i >= 0; i--)
+            {
+                attrs.Add(col[i]);
+                col.RemoveAt(i);
+            }
+
+            SortAttributeList(attrs);
+
+            for (var i = 0; i < attrs.Count; i++)
+            {
+                col.Append(attrs[i]);
+            }
+        }
+    }
+
+    static void SortAttributeList(List<XmlAttribute> attrs)
+    {
+        attrs.Sort(delegate (XmlAttribute a, XmlAttribute b)
+        {
+            var result = string.Compare(a.Name, b.Name, sort_attr_comp);
+            if (result == 0)
+            {
+                return string.Compare(a.Value, b.Value, sort_attr_comp);
+            }
+            else if (!string.IsNullOrEmpty(primary_attr))
+            {
+            // If a primary_attr is specified, it is always made the first attribute!
+            if (a.Name.Equals(primary_attr, sort_attr_comp))
+                {
+                    return -1;
+                }
+                else if (b.Name.Equals(primary_attr, sort_attr_comp))
+                {
+                    return 1;
+                }
+            }
+            return result;
+        });
+    }
+}
