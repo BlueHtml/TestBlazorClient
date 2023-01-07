@@ -5,6 +5,8 @@
 @implements IDisposable
 @inject ClipboardService ClipboardService
 
+<PageTitle>Sort XML</PageTitle>
+
 <h1>Sort XML</h1>
 
 <h3>input:</h3>
@@ -15,6 +17,7 @@
 <label><input type="checkbox" @bind="isSortAttr" />Attr</label>
 <br />
 <button class="btn btn-primary" @onclick="Sort">Sort and format</button>
+<button class="btn btn-primary" @onclick="Reset">Reset</button>
 
 <hr />
 <span class="h3">output:</span>
@@ -29,6 +32,8 @@
     string output;
     bool isSortNode = true;
     bool isSortAttr = true;
+
+    void Reset() => input = output = "";
 
     void Sort()
     {
@@ -234,8 +239,8 @@
             }
             else if (!string.IsNullOrEmpty(primary_attr))
             {
-            // If a primary_attr is specified, it is always made the first attribute!
-            if (a.Name.Equals(primary_attr, sort_attr_comp))
+                // If a primary_attr is specified, it is always made the first attribute!
+                if (a.Name.Equals(primary_attr, sort_attr_comp))
                 {
                     return -1;
                 }

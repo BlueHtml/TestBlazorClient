@@ -1,10 +1,7 @@
 name: DeployToGitHubPages
-env:
-  PUBLISH_DIR: TestBlazorClient/bin/Release/net5.0/publish/wwwroot
 
-# Controls when the action will run
 on:
-  workflow_dispatch: # 网页上手动
+  workflow_dispatch:
   push:
     branches: [ main ]
 
@@ -12,23 +9,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@main
-
-    - name: Publish app
-      run: dotnet publish -c Release
-
-    - name: Rewrite base href
-      uses: SteveSandersonMS/ghaction-rewrite-base-href@v1
-      with:
-        html_path: ${{ env.PUBLISH_DIR }}/index.html
-        base_href: /TestBlazorClient/
-
-    - name: GitHub Pages
-      if: success()
-      uses: crazy-max/ghaction-github-pages@v2
-      with:
-        target_branch: gh-pages
-        build_dir: ${{ env.PUBLISH_DIR }}
-        jekyll: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@main
+      
+      - name: Publish app
+        run: dotnet publish -c:Release -o:publish -p:GHPages=true
+      
+      # Deploy the site
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: publish/wwwroot
+          force_orphan: true
