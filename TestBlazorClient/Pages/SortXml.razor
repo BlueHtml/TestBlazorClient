@@ -16,12 +16,12 @@
 <label><input type="checkbox" @bind="isSortNode" />Node</label>
 <label><input type="checkbox" @bind="isSortAttr" />Attr</label>
 <br />
-<button class="btn btn-primary" @onclick="Sort">Sort and format</button>
-<button class="btn btn-primary" @onclick="Reset">Reset</button>
+<button class="btn btn-outline-primary" @onclick="Sort">Sort and format</button>
+<button class="btn btn-outline-danger ms-3" @onclick="Reset">Reset</button>
 
 <hr />
 <span class="h3">output:</span>
-<button class="btn btn-primary" @onclick="CopyToClipboard" disabled=@state.IsDisabled>
+<button class="btn btn-outline-primary" @onclick="CopyToClipboard" disabled=@state.IsDisabled>
     <i class="@state.ClassName"></i> @state.Text
 </button>
 
@@ -43,7 +43,7 @@
 
         try
         {
-            doc.LoadXml(input);
+            doc.LoadXml(input.Trim());
             doc.PreserveWhitespace = true;
         }
         catch (Exception ex)

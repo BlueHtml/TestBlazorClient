@@ -1,0 +1,88 @@
+﻿@page "/GenerateDate"
+@using System.Xml
+@using System.Text;
+@using System.Threading
+@using System.Globalization;
+@implements IDisposable
+@inject ClipboardService ClipboardService
+
+<PageTitle>Generate Date</PageTitle>
+
+<h1>Generate Date</h1>
+
+<h3>input:</h3>
+<div class="row row-cols-lg-auto g-3 align-items-center">
+    <div class="col-12">
+        <div class="input-group">
+            <div class="input-group-text">日期</div>
+            <input type="text" @bind="input" class="form-control" placeholder="yy/MM/dd-yy/MM/dd">
+        </div>
+    </div>
+
+    <div class="col-12">
+        <button class="btn btn-outline-primary" @onclick="Generate">Generate</button>
+        <button class="btn btn-outline-danger ms-3" @onclick="Reset">Reset</button>
+    </div>
+</div>
+
+<hr />
+<span class="h3">output:</span>
+<button class="btn btn-outline-primary" @onclick="CopyToClipboard" disabled=@state.IsDisabled>
+    <i class="@state.ClassName"></i> @state.Text
+</button>
+
+<pre><code id="out">@output</code></pre>
+
+@code {
+    string input;
+    string output;
+
+    void Reset() => input = output = "";
+
+    const string FORMAT = "yy/MM/dd";
+    static readonly CultureInfo _cultureInfo = CultureInfo.CreateSpecificCulture("en-US");
+    void Generate()
+    {
+        try
+        {
+            string[] arr = input.Split('-');//yy/MM/dd-yy/MM/dd "22/12/31-23/01/03"
+            DateTime indate = DateTime.ParseExact(arr[0], FORMAT, _cultureInfo, DateTimeStyles.None);
+            DateTime outdate = DateTime.ParseExact(arr[1], FORMAT, _cultureInfo, DateTimeStyles.None);
+            List<DateTime> indates = new();
+            while (indate < outdate)
+            {
+                indates.Add(indate);
+                indate = indate.AddDays(1);
+            }
+            output = string.Format("[ {0} ]", string.Join(", ", indates.Select(p => $"\"{p:yyyy-MM-dd}\"")));
+        }
+        catch (Exception ex)
+        {
+            output = $"error! input:{input}. ex:{ex.Message}";
+        }
+    }
+
+    #region Copy到粘贴板
+
+    CancellationTokenSource cts = new();
+    State state = new("Copy", "oi oi-clipboard");
+
+    async Task CopyToClipboard()
+    {
+        var temp = state;
+        state = new("Copied", "oi oi-check", IsDisabled: true);
+        await ClipboardService.WriteTextAsync(output);
+        await Task.Delay(TimeSpan.FromSeconds(2), cts.Token);
+        state = temp;
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel(); // Cancel Task.Delay
+        cts.Dispose();
+    }
+
+    record State(string Text, string ClassName, bool IsDisabled = false);
+
+    #endregion
+}
